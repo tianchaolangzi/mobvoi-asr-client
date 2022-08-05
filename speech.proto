@@ -1,0 +1,319 @@
+syntax = "proto3";
+
+package com.mobvoi.speech.recognition.v1;
+
+option cc_enable_arenas = true;
+option java_outer_classname = "SpeechProto";
+option java_package = "com.mobvoi.ai_commerce.speech.v1";
+
+// 语音识别服务
+service Speech {
+    // 同步语音识别接口
+    rpc Recognize (RecognizeRequest) returns (RecognizeResponse);
+
+    // 双向流式语音识别接口
+    rpc StreamingRecognize (stream StreamingRecognizeRequest) returns (stream StreamingRecognizeResponse);
+}
+
+// 同步语音识别请求
+message RecognizeRequest {
+    // *必须* 识别参数
+    RecognitionConfig config = 1;
+
+    // *必须* 识别音频数据
+    RecognitionAudio audio = 2;
+}
+
+// 流式语音识别请求
+message StreamingRecognizeRequest {
+    // *必须* 流式请求内容, streaming_config 和 audio_content二者选一
+    oneof streaming_request {
+        // 流式请求参数. 第一条StreamingRecognizeRequest是streaming_config.
+        StreamingRecognitionConfig streaming_config = 1;
+
+        // 流式请求音频数据.
+        // StreamingRecognizeRequest从第二条数据开始必须是audio_content.
+        // 音频的编码格式必须在streaming_config里指定.
+        bytes audio_content = 2;
+    }
+}
+
+// 流式请求参数
+message StreamingRecognitionConfig {
+    // *必须* 识别参数
+    RecognitionConfig config = 1;
+
+    // 如果设置成true, 当检测到语音流中没有人说话后,
+    // 会返回END_OF_SINGLE_UTTERANCE, 并
+    // 停止识别, 必须指定静音检测配置.
+    // 默认(或者不设置)值为false.
+    bool endpoint_detection = 2;
+
+    // 如果设置成true, 会在识别过程中试试返回已识别的结果.
+    // 默认(或者不设置)值为false.
+    bool partial_result = 3;
+
+    // 静音检测设置
+    EndpointConfig endpoint_config = 4;
+
+    // for ivr parameter
+    //线路id
+    string channel_id = 5;
+
+    //模型名称
+    string model = 6 [deprecated = true];
+}
+
+// 语音识别结果
+message RecognizeResponse {
+    // 语音识别结果. 每个元素代表音频文件中的一句话的识别结果.
+    repeated SingleUtteranceResult results = 1;
+    // 音频信息
+    ResponseAudioInfo audio_info = 2;
+    // 错误信息
+    Error error = 3;
+}
+
+// 单句话识别结果
+message SingleUtteranceResult {
+    // 此句话在音频中的开始时间(秒).
+    float start_time = 1;
+    // 此句话在音频中的结束时间(秒).
+    float end_time = 2;
+    // 此句话的说话人(比如1, 2 ...).
+    string speaker = 3;
+    // 语音识别结果. 跟请求中的max_alternatives有关. 目前只会返回一个结果.
+    repeated SpeechRecognitionAlternative alternatives = 4;
+    // 此句话的说话人身份
+    string speaker_identity = 5;
+    // 此句话在音频中的通道索引，从0开始
+    int32 channel_index = 6;
+    // 词级别时间戳
+    repeated WordPieceResult word_pieces = 7;
+}
+
+// 识别结果词级别时间戳
+message WordPieceResult {
+    string word = 1;
+    int32 start = 2;
+    int32 end = 3;
+}
+
+// 流式识别结果
+message StreamingRecognizeResponse {
+    // 识别事件
+    enum SpeechEventType {
+        // 没有任何事件
+        SPEECH_EVENT_UNSPECIFIED = 0;
+
+        // 检测到语音流里无人说话. 当检测到该时间后, 服务端会停止语音识别,
+        // 不会再处理任何客户端
+        // 发送的语音数据. 客户端在收到此事件后不要再往服务端发送音频数据.
+        END_OF_SINGLE_UTTERANCE = 1;
+
+        // 当enable_continuous_decoding设置为true时，end_silence将失效，
+        // server端自动检查silence，遇到silence将触发该事件，
+        // 并返回此段结果（上次silence到本次silence之间的结果）
+        CONTINUOUS_DECODING_END_OF_UTTERANCE = 2;
+
+        STEADY_SPEECH_DETECTED = 3;
+    }
+
+    // 识别出现错误. 服务端不再进行识别, 客户端应停止发送数据.
+    Error error = 1;
+
+    // 流式识别语音结果. 当speech_event_type为END_OF_SINGLE_UTTERANCE,
+    // 返回的是最终识别结果.
+    // 当speech_event_type为SPEECH_EVENT_UNSPECIFIED时, 如果partial_result打开,
+    // 会返回中间识别结果.
+    repeated StreamingRecognitionResult results = 2;
+
+    // 识别事件.
+    SpeechEventType speech_event_type = 3;
+
+    // 音频信息
+    ResponseAudioInfo audio_info = 4;
+
+    // 当前语音段识别结果的起始时间信息，单位为帧，在coutinuous decoding中使用
+    int32 begin = 5;
+    // 当前语音段识别结果的起始结束信息，单位为帧，在continuous decoding中使用,
+    // 分以下两种情况:
+    // 1. 当前识别结果为中间结果(partial)，无法拿到当前段语音准确的结束时间，
+    //    end = 0。
+    // 2. 当前识别结果为final结果(对应speech_event_type为
+    //    CONCURRENT_DECODING_END_OF_UTTERANCE)，当前段语音识别已经结束，可以拿到
+    //    准确的结束时间，end值为实际语音结束时间。
+    int32 end = 6;
+}
+
+// 流式识别语音结果
+message StreamingRecognitionResult {
+    // 语音识别结果. 跟请求中的max_alternatives有关. 目前只会返回一个结果.
+    repeated SpeechRecognitionAlternative alternatives = 1;
+    // 词级别时间戳
+    repeated WordPieceResult word_pieces = 2;
+}
+
+message SpeechRecognitionAlternative {
+    // 语音识别文本结果.
+    string transcript = 1;
+    // 暂无用.
+    float confidence = 2;
+    // 解码进度，该结果出现的帧位置对应的时间，单位：毫秒
+    int32 frame_time = 3;
+}
+
+// 识别参数
+message RecognitionConfig {
+    enum Encoding {
+        // 未指定. 会返回错误值 [google.rpc.Code.INVALID_ARGUMENT].
+        ENCODING_UNSPECIFIED = 0;
+
+        // 16-bit signed little-endian wav 编码.
+        WAV16 = 1;
+    }
+
+    enum DiarizationMode {
+        // 默认值，不进行话者分离
+        DISABLE = 0;
+        // 只分段
+        SEGMENT_WITHOUT_DIARIZATION = 1;
+        // 分段并进行话者分离
+        SEGMENT_AND_DIARIZATION = 2;
+    }
+
+    // *必须* 音频编码格式
+    Encoding encoding = 1;
+
+    // *必须* 音频采样率. 目前只支持8000.
+    int32 sample_rate = 2;
+
+    // *必须* 音频通道数量. 目前支持单声道和双声道.
+    int32 channel = 3;
+
+    // *暂无用*
+    int32 max_alternatives = 4;
+
+    // 词表, 对于新词或专有名词会有比较好的识别效果,
+    // 如设置词表王向名/天洪商场, 识别结果会是王向明->王向名, 天虹商场->天洪商场
+    repeated string query_context = 5;
+
+    // vad灵敏度
+    float vad_sensitivity = 6;
+
+    // query context url
+    string query_context_url = 7;
+
+    // 是否添加标点符号，默认false
+    bool enable_punctuation = 8;
+
+    // 话者分离模式, 0: disable, 1: 只分段, 2: 分段并话者分离, 默认值: 0
+    // 只对batch有效，streaming不进行话者分离
+    DiarizationMode diarization_mode = 9;
+
+    // 是否角色分离，默认false [ 只在diarization_mode不是 0(DISABLE) 时有效 ]
+    // 只对batch有效，streaming不进行角色分离
+    bool enable_diarization_identify = 10;
+
+    // 指明当前是英文模式还是中文模式，以后如果可以从模型中获取中英文信息，则可以deprecate这个字段
+    AsrModel asr_model = 11;
+
+    // 是否开启itn，弃用
+    bool enable_itn = 12 [deprecated = true];
+
+    // 应用于专用模型，若专用模型和通用模型的识别结果一致，则采用专用模型识别结果；
+    // 若专用模型和通用模型的识别结果不一致，用专用模型的识别结果与reference word
+    // 进行比对，若比对一致，则采用专用模型识别结果；若比对不一致，则采用通用模型的识别结果
+    repeated string reference_word = 13;
+
+    // 音频要推送的远程地址，如果非空，则识别结束后自动向此地址上推送音频
+    string audio_save_url = 14;
+
+    // 是否开启连续识别，如果开启，streaming模式下遇到silense将不会自动结束，并以逗号(,)分割
+    bool enable_continuous_decoding = 15;
+
+    // 联系人词表
+    repeated string contact_word = 16;
+
+    // 是否关闭itn
+    bool disable_itn = 17;
+}
+
+// 识别音频数据
+message RecognitionAudio {
+    // *必须* 音频数据.
+    bytes content = 1;
+}
+
+// 断点检测参数
+message EndpointConfig {
+    // 开始静音时长(从音频输入开始经历start_silence秒无人说话, 则返回静音事件)
+    float start_silence = 1;
+
+    // 结束静音时长(当输入音频中说话人停止说话end_silence秒, 则返回静音事件)
+    float end_silence = 2;
+}
+
+// 音频信息
+message ResponseAudioInfo {
+    // 音频时长, [ 单位: 秒, 保留三位小数 ]
+    float audio_time = 1;
+    // ASR的总的rtf
+    float total_rtf = 2;
+    // 音频在OSS上的存储地址
+    string audio_save_path_oss = 10;
+}
+
+message AsrModel {
+    enum Language {
+        //中文(简体)
+        zh_CN = 0;
+        //中文(繁体)
+        zh_TW = 1;
+        //英文
+        en = 2;
+    }
+
+    enum ModelType {
+        MODEL_TYPE_COMMON = 0;
+        MODEL_TYPE_AGE = 1;
+        MODEL_TYPE_ZODIAC = 2;
+        MODEL_TYPE_DIGIT = 3;
+        MODEL_TYPE_LETTER = 4;
+    }
+    Language language = 1;
+    ModelType model_type = 2;
+}
+
+// 识别错误
+message Error {
+    // 错误代码
+    enum Code {
+        // 无错误
+        OK = 0;
+
+        // 服务端取消
+        CANCELLED = 1;
+
+        // 未知错误
+        UNKNOWN = 2;
+
+        // 请求参数不合法
+        INVALID_ARGUMENT = 3;
+
+        // 请求条件不合法
+        FAILED_PRECONDITION = 9;
+
+        // 请求超过最大并发数
+        CONCURRENT_OVERFLOW_ERROR = 10;
+
+        // 授权已过期
+        LICENSE_OVERDUE_ERROR = 11;
+    }
+
+    // 错误代码
+    Code code = 1;
+
+    // 错误消息
+    string message = 2;
+}
