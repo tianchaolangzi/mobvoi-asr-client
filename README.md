@@ -1,7 +1,7 @@
 # Attention:
    1. Your python must be python3
    2. You can add --continuous_decoding to specify it's continuous decoding mode.
-
+   3. The test audio must be 16000 sample rate, 16bit precision, single channel
 
 # Requriements: 
     pip install grpcio-tools
