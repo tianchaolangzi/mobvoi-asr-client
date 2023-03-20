@@ -13,11 +13,10 @@
 
 # mobvoi asr service 
     cantonese asr host: 117.50.100.153:9595
-    sichuan dialect asr host: 117.50.100.153:9596
-
+    <!-- sichuan dialect asr host: 117.50.100.153:9596 -->
+    english asr host: 117.50.100.153:9596
 
 # example
-
     python grpc_client.py --continuous_decoding --host=117.50.100.153:9595 test_wavs/test_yue_1.wav
-
-    python grpc_client.py --continuous_decoding --host=117.50.100.153:9596 test_wavs/test_chuan_1.wav
+    <!-- python grpc_client.py --continuous_decoding --host=117.50.100.153:9596 test_wavs/test_chuan_1.wav -->
+    python grpc_client.py --continuous_decoding --host=117.50.100.153:9596 test_wavs/test_en_2.wav
