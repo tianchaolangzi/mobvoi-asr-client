@@ -13,7 +13,7 @@
 
 # mobvoi asr service 
     cantonese asr host: 117.50.100.153:9595
-    <!-- sichuan dialect asr host: 117.50.100.153:9596 -->
+    ~~sichuan dialect asr host: 117.50.100.153:9596~~
     english asr host: 117.50.100.153:9596
 
 # example
